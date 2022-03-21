@@ -1,3 +1,4 @@
+#include <deque>
 #include <epicsEvent.h>
 #include "ADDriver.h"
 
@@ -10,14 +11,18 @@ class epicsShareClass simDetector : public ADDriver {
 public:
     simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDataType_t dataType,
                 int maxBuffers, size_t maxMemory,
-                int priority, int stackSize);
+                int priority, int stackSize, int numThreads);
 
     /* These are the methods that we override from ADDriver */
     virtual asynStatus writeInt32(asynUser *pasynUser, epicsInt32 value);
     virtual asynStatus writeFloat64(asynUser *pasynUser, epicsFloat64 value);
     virtual void setShutter(int open);
     virtual void report(FILE *fp, int details);
-    void simTask(); /**< Should be private, but gets called from C, so must be public */
+    void simTask(int index); /**< Should be private, but gets called from C, so must be public */
+	
+	void spawnAcquireThread(int index);
+	void waitAcquireThread();
+	void exportThread();
 
 protected:
     int SimGainX;
@@ -57,27 +62,35 @@ protected:
 
 private:
     /* These are the methods that are new to this class */
-    template <typename epicsType> int computeArray(int sizeX, int sizeY);
-    template <typename epicsType> int computeLinearRampArray(int sizeX, int sizeY);
-    template <typename epicsType> int computePeaksArray(int sizeX, int sizeY);
-    template <typename epicsType> int computeSineArray(int sizeX, int sizeY);
-    int computeImage();
+    template <typename epicsType> int computeArray(int index, int sizeX, int sizeY);
+    template <typename epicsType> int computeLinearRampArray(int index, int sizeX, int sizeY);
+    template <typename epicsType> int computePeaksArray(int index, int sizeX, int sizeY);
+    template <typename epicsType> int computeSineArray(int index, int sizeX, int sizeY);
+    int computeImage(int index, NDArray** output);
 
-    /* Our data */
-    epicsEventId startEventId_;
-    epicsEventId stopEventId_;
-    NDArray *pRaw_;
-    NDArray *pBackground_;
+    /* Our data */	
+	epicsEvent* startAcquireEvent;
+	epicsEvent** threadFinishEvents;
+	epicsEvent** stopAcquireEvents;
+	
+    NDArray** pRaw_;
+    NDArray** pBackground_;
     bool useBackground_;
-    NDArray *pRamp_;
-    NDArray *pPeak_;
+    NDArray** pRamp_;
+    NDArray** pPeak_;
+	NDArray* pImage;
     NDArrayInfo arrayInfo_;
+	size_t numThreads;
     double *xSine1_;
     double *xSine2_;
     double *ySine1_;
     double *ySine2_;
     double xSineCounter_;
     double ySineCounter_;
+	
+	epicsMutex* dequeLock;
+	
+	std::deque<NDArray*> export_queue;
 };
 
 typedef enum {
@@ -91,6 +104,12 @@ typedef enum {
     SimSineOperationAdd,
     SimSineOperationMultiply
 } SimSineOperation_t;
+
+typedef struct
+{
+	simDetector* driver;
+	int index;
+} acquire_data;
 
 #define SimGainXString                "SIM_GAIN_X"
 #define SimGainYString                "SIM_GAIN_Y"

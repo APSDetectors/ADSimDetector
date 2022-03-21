@@ -42,7 +42,7 @@ static const char *driverName = "simDetector";
 #endif
 
 /** Template function to compute the simulated detector data for any data type */
-template <typename epicsType> int simDetector::computeArray(int sizeX, int sizeY)
+template <typename epicsType> int simDetector::computeArray(int index, int sizeX, int sizeY)
 {
     int simMode;
     int status = asynSuccess;
@@ -51,8 +51,8 @@ template <typename epicsType> int simDetector::computeArray(int sizeX, int sizeY
     double dOffset;
     double noise;
     int i;
-    epicsType* pRawData = (epicsType*)pRaw_->pData;
-    epicsType* pBackgroundData = (epicsType*)pBackground_->pData;
+    epicsType* pRawData = (epicsType*)pRaw_[index]->pData;
+    epicsType* pBackgroundData = (epicsType*)pBackground_[index]->pData;
 
     getIntegerParam(SimMode, &simMode);
     getIntegerParam(SimResetImage, &resetImage);
@@ -91,13 +91,13 @@ template <typename epicsType> int simDetector::computeArray(int sizeX, int sizeY
 
     switch(simMode) {
         case SimModeLinearRamp:
-            status = computeLinearRampArray<epicsType>(sizeX, sizeY);
+            status = computeLinearRampArray<epicsType>(index, sizeX, sizeY);
             break;
         case SimModePeaks:
-            status = computePeaksArray<epicsType>(sizeX, sizeY);
+            status = computePeaksArray<epicsType>(index, sizeX, sizeY);
             break;
         case SimModeSine:
-            status = computeSineArray<epicsType>(sizeX, sizeY);
+            status = computeSineArray<epicsType>(index, sizeX, sizeY);
             break;
         case SimModeOffsetNoise:
             break;
@@ -107,7 +107,7 @@ template <typename epicsType> int simDetector::computeArray(int sizeX, int sizeY
 }
 
 /** Template function to compute the simulated detector data for any data type */
-template <typename epicsType> int simDetector::computeLinearRampArray(int sizeX, int sizeY)
+template <typename epicsType> int simDetector::computeLinearRampArray(int index, int sizeX, int sizeY)
 {
     epicsType *pMono=NULL, *pRed=NULL, *pGreen=NULL, *pBlue=NULL;
     int columnStep=0, rowStep=0, colorMode;
@@ -116,8 +116,8 @@ template <typename epicsType> int simDetector::computeLinearRampArray(int sizeX,
     double gain, gainX, gainY, gainRed, gainGreen, gainBlue;
     int resetImage;
     int i, j;
-    epicsType* pRawData = (epicsType*)pRaw_->pData;
-    epicsType* pRampData = (epicsType*)pRamp_->pData;
+    epicsType* pRawData = (epicsType*)pRaw_[index]->pData;
+    epicsType* pRampData = (epicsType*)pRamp_[index]->pData;
     epicsType *pData;
 
     status = getDoubleParam (ADGain,        &gain);
@@ -168,7 +168,7 @@ template <typename epicsType> int simDetector::computeLinearRampArray(int sizeX,
             pBlue  = pData + 2*sizeX*sizeY;
             break;
     }
-    pRaw_->pAttributeList->add("ColorMode", "Color mode", NDAttrInt32, &colorMode);
+    pRaw_[index]->pAttributeList->add("ColorMode", "Color mode", NDAttrInt32, &colorMode);
 
     if (resetImage) {
         for (i=0; i<sizeY; i++) {
@@ -230,7 +230,7 @@ template <typename epicsType> int simDetector::computeLinearRampArray(int sizeX,
 }
 
 /** Compute array for array of peaks */
-template <typename epicsType> int simDetector::computePeaksArray(int sizeX, int sizeY)
+template <typename epicsType> int simDetector::computePeaksArray(int index, int sizeX, int sizeY)
 {
     epicsType *pRed=NULL, *pGreen=NULL, *pBlue=NULL;
     int colorMode;
@@ -244,8 +244,8 @@ template <typename epicsType> int simDetector::computePeaksArray(int sizeX, int 
     double peakVariation;
     int resetImage;
     double gain, gainVariation, gainRed, gainGreen, gainBlue;
-    epicsType *pPeakData = (epicsType*)pPeak_->pData;
-    epicsType *pRawData = (epicsType*)pRaw_->pData;
+    epicsType *pPeakData = (epicsType*)pPeak_[index]->pData;
+    epicsType *pRawData = (epicsType*)pRaw_[index]->pData;
     epicsType *pIn, *pOut;
 
     status = getIntegerParam(NDColorMode,   &colorMode);
@@ -280,7 +280,7 @@ template <typename epicsType> int simDetector::computePeaksArray(int sizeX, int 
         }
     }
 
-    pRaw_->pAttributeList->add("ColorMode", "Color mode", NDAttrInt32, &colorMode);
+    pRaw_[index]->pAttributeList->add("ColorMode", "Color mode", NDAttrInt32, &colorMode);
     for (i=0; i<peaksNumY; i++) {
         for (j=0; j<peaksNumX; j++) {
             if (peakVariation != 0) {
@@ -346,7 +346,7 @@ template <typename epicsType> int simDetector::computePeaksArray(int sizeX, int 
 }
 
 /** Template function to compute the simulated detector data for any data type */
-template <typename epicsType> int simDetector::computeSineArray(int sizeX, int sizeY)
+template <typename epicsType> int simDetector::computeSineArray(int index, int sizeX, int sizeY)
 {
     epicsType *pMono=NULL, *pRed=NULL, *pGreen=NULL, *pBlue=NULL;
     int columnStep=0, rowStep=0, colorMode;
@@ -387,31 +387,31 @@ template <typename epicsType> int simDetector::computeSineArray(int sizeX, int s
 
     switch (colorMode) {
         case NDColorModeMono:
-            pMono = (epicsType *)pRaw_->pData;
+            pMono = (epicsType *)pRaw_[index]->pData;
             break;
         case NDColorModeRGB1:
             columnStep = 3;
             rowStep = 0;
-            pRed   = (epicsType *)pRaw_->pData;
-            pGreen = (epicsType *)pRaw_->pData+1;
-            pBlue  = (epicsType *)pRaw_->pData+2;
+            pRed   = (epicsType *)pRaw_[index]->pData;
+            pGreen = (epicsType *)pRaw_[index]->pData+1;
+            pBlue  = (epicsType *)pRaw_[index]->pData+2;
             break;
         case NDColorModeRGB2:
             columnStep = 1;
             rowStep = 2 * sizeX;
-            pRed   = (epicsType *)pRaw_->pData;
-            pGreen = (epicsType *)pRaw_->pData + sizeX;
-            pBlue  = (epicsType *)pRaw_->pData + 2*sizeX;
+            pRed   = (epicsType *)pRaw_[index]->pData;
+            pGreen = (epicsType *)pRaw_[index]->pData + sizeX;
+            pBlue  = (epicsType *)pRaw_[index]->pData + 2*sizeX;
             break;
         case NDColorModeRGB3:
             columnStep = 1;
             rowStep = 0;
-            pRed   = (epicsType *)pRaw_->pData;
-            pGreen = (epicsType *)pRaw_->pData + sizeX*sizeY;
-            pBlue  = (epicsType *)pRaw_->pData + 2*sizeX*sizeY;
+            pRed   = (epicsType *)pRaw_[index]->pData;
+            pGreen = (epicsType *)pRaw_[index]->pData + sizeX*sizeY;
+            pBlue  = (epicsType *)pRaw_[index]->pData + 2*sizeX*sizeY;
             break;
     }
-    pRaw_->pAttributeList->add("ColorMode", "Color mode", NDAttrInt32, &colorMode);
+    pRaw_[index]->pAttributeList->add("ColorMode", "Color mode", NDAttrInt32, &colorMode);
 
     if (resetImage) {
       if (xSine1_) free(xSine1_);
@@ -502,7 +502,7 @@ void simDetector::setShutter(int open)
 }
 
 /** Computes the new image data */
-int simDetector::computeImage()
+int simDetector::computeImage(int index, NDArray** output)
 {
     int status = asynSuccess;
     NDDataType_t dataType;
@@ -516,7 +516,6 @@ int simDetector::computeImage()
     NDDimension_t dimsOut[3];
     size_t dims[3];
     NDArrayInfo_t arrayInfo;
-    NDArray *pImage;
     const char* functionName = "computeImage";
 
     /* NOTE: The caller of this function must have taken the mutex */
@@ -539,6 +538,14 @@ int simDetector::computeImage()
                     driverName, functionName);
 
     /* Make sure parameters are consistent, fix them if they are not */
+    if (binX < 1) {
+        binX = 1;
+        status |= setIntegerParam(ADBinX, binX);
+    }
+    if (binY < 1) {
+        binY = 1;
+        status |= setIntegerParam(ADBinY, binY);
+    }
     if (minX < 0) {
         minX = 0;
         status |= setIntegerParam(ADMinX, minX);
@@ -555,44 +562,12 @@ int simDetector::computeImage()
         minY = maxSizeY-1;
         status |= setIntegerParam(ADMinY, minY);
     }
-    if (sizeX < 1) {
-	sizeX = 1;
-        status |= setIntegerParam(ADSizeX, sizeX);
-    }
-    if (sizeY < 1) {
-	sizeY = 1;
-        status |= setIntegerParam(ADSizeY, sizeY);
-    }
-    if (sizeX > maxSizeX-minX) {
+    if (minX+sizeX > maxSizeX) {
         sizeX = maxSizeX-minX;
         status |= setIntegerParam(ADSizeX, sizeX);
     }
-    if (sizeY > maxSizeY-minY) {
+    if (minY+sizeY > maxSizeY) {
         sizeY = maxSizeY-minY;
-        status |= setIntegerParam(ADSizeY, sizeY);
-    }
-    if (binX < 1) {
-        binX = 1;
-        status |= setIntegerParam(ADBinX, binX);
-    }
-    if (binY < 1) {
-        binY = 1;
-        status |= setIntegerParam(ADBinY, binY);
-    }
-    if (binX > sizeX) {
-	binX = sizeX;
-        status |= setIntegerParam(ADBinX, binX);
-    }
-    if (binY > sizeY) {
-	binY = sizeY;
-        status |= setIntegerParam(ADBinY, binY);
-    }
-    if (sizeX % binX != 0) {
-	sizeX = (sizeX / binX) * binX;
-        status |= setIntegerParam(ADSizeX, sizeX);
-    }
-    if (sizeY % binY != 0) {
-	sizeY = (sizeY / binY) * binY;
         status |= setIntegerParam(ADSizeY, sizeY);
     }
 
@@ -623,22 +598,19 @@ int simDetector::computeImage()
     }
 
     if (resetImage) {
-        /* Free the previous buffers */
-        if (pRaw_) pRaw_->release();
-        if (pBackground_) pBackground_->release();
-        if (pRamp_) pRamp_->release();
-        if (pPeak_) pPeak_->release();
+    /* Free the previous raw buffer */
+        if (pRaw_[index]) pRaw_[index]->release();
         /* Allocate the raw buffer we use to compute images. */
         dims[xDim] = maxSizeX;
         dims[yDim] = maxSizeY;
         if (ndims > 2) dims[colorDim] = 3;
-        pRaw_        = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
-        pBackground_ = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
-        pRamp_       = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
-        pPeak_       = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
-        pRaw_->getInfo(&arrayInfo_);
-
-        if (!pRaw_) {
+        pRaw_[index]        = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
+        pBackground_[index] = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
+        pRamp_[index]       = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
+        pPeak_[index]       = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
+		pRaw_[index]->getInfo(&arrayInfo_);
+		
+        if (!pRaw_[index]) {
             asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
                       "%s:%s: error allocating raw buffer\n",
                       driverName, functionName);
@@ -648,54 +620,56 @@ int simDetector::computeImage()
 
     switch (dataType) {
         case NDInt8:
-            status |= computeArray<epicsInt8>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsInt8>(index, maxSizeX, maxSizeY);
             break;
         case NDUInt8:
-            status |= computeArray<epicsUInt8>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsUInt8>(index, maxSizeX, maxSizeY);
             break;
         case NDInt16:
-            status |= computeArray<epicsInt16>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsInt16>(index, maxSizeX, maxSizeY);
             break;
         case NDUInt16:
-            status |= computeArray<epicsUInt16>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsUInt16>(index, maxSizeX, maxSizeY);
             break;
         case NDInt32:
-            status |= computeArray<epicsInt32>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsInt32>(index, maxSizeX, maxSizeY);
             break;
         case NDUInt32:
-            status |= computeArray<epicsUInt32>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsUInt32>(index, maxSizeX, maxSizeY);
             break;
         case NDInt64:
-            status |= computeArray<epicsInt64>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsInt64>(index, maxSizeX, maxSizeY);
             break;
         case NDUInt64:
-            status |= computeArray<epicsUInt64>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsUInt64>(index, maxSizeX, maxSizeY);
             break;
         case NDFloat32:
-            status |= computeArray<epicsFloat32>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsFloat32>(index, maxSizeX, maxSizeY);
             break;
         case NDFloat64:
-            status |= computeArray<epicsFloat64>(maxSizeX, maxSizeY);
+            status |= computeArray<epicsFloat64>(index, maxSizeX, maxSizeY);
             break;
     }
 
     /* Extract the region of interest with binning.
      * If the entire image is being used (no ROI or binning) that's OK because
      * convertImage detects that case and is very efficient */
-    pRaw_->initDimension(&dimsOut[xDim], sizeX);
-    pRaw_->initDimension(&dimsOut[yDim], sizeY);
-    if (ndims > 2) pRaw_->initDimension(&dimsOut[colorDim], 3);
+    pRaw_[index]->initDimension(&dimsOut[xDim], sizeX);
+    pRaw_[index]->initDimension(&dimsOut[yDim], sizeY);
+    if (ndims > 2) pRaw_[index]->initDimension(&dimsOut[colorDim], 3);
     dimsOut[xDim].binning = binX;
     dimsOut[xDim].offset  = minX;
     dimsOut[xDim].reverse = reverseX;
     dimsOut[yDim].binning = binY;
     dimsOut[yDim].offset  = minY;
     dimsOut[yDim].reverse = reverseY;
+	
     /* We save the most recent image buffer so it can be used in the read() function.
      * Now release it before getting a new version. */
-    if (this->pArrays[0]) this->pArrays[0]->release();
-    status = this->pNDArrayPool->convert(pRaw_,
-                                         &this->pArrays[0],
+	//*output = this->pNDArrayPool->alloc(ndims, dims, dataType, 0, NULL);
+	
+    status = this->pNDArrayPool->convert(pRaw_[index],
+                                         output,
                                          dataType,
                                          dimsOut);
     if (status) {
@@ -704,12 +678,12 @@ int simDetector::computeImage()
                     driverName, functionName);
         return(status);
     }
-    pImage = this->pArrays[0];
-    pImage->getInfo(&arrayInfo);
+    
+    (*output)->getInfo(&arrayInfo);
     status = asynSuccess;
     status |= setIntegerParam(NDArraySize,  (int)arrayInfo.totalBytes);
-    status |= setIntegerParam(NDArraySizeX, (int)pImage->dims[xDim].size);
-    status |= setIntegerParam(NDArraySizeY, (int)pImage->dims[yDim].size);
+    status |= setIntegerParam(NDArraySizeX, (int)(*output)->dims[xDim].size);
+    status |= setIntegerParam(NDArraySizeY, (int)(*output)->dims[yDim].size);
     status |= setIntegerParam(SimResetImage, 0);
     if (status) asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
                     "%s:%s: error setting parameters\n",
@@ -719,62 +693,154 @@ int simDetector::computeImage()
 
 static void simTaskC(void *drvPvt)
 {
-    simDetector *pPvt = (simDetector *)drvPvt;
-
-    pPvt->simTask();
+	acquire_data* data = (acquire_data*) drvPvt;
+	
+	data->driver->simTask(data->index);
 }
+
+void simDetector::spawnAcquireThread(int index)
+{
+	acquire_data* data = new acquire_data;
+	
+	data->driver = this;
+	data->index = index;
+	
+	epicsThreadCreate("simDetector::simTask()",
+		epicsThreadPriorityMedium,
+		epicsThreadGetStackSize(epicsThreadStackMedium),
+		(EPICSTHREADFUNC)::simTaskC,
+		data);
+}
+
+
+static void acquire_thread_callback(void *drvPvt)    { ((simDetector*) drvPvt)->waitAcquireThread(); }
+static void export_thread_callback(void *drvPvt)     { ((simDetector*) drvPvt)->exportThread(); }
+
+void simDetector::exportThread()
+{
+	while(1)
+	{
+		dequeLock->lock();
+			bool sleep = export_queue.empty();
+		dequeLock->unlock();
+		
+		if (sleep)
+		{
+			epicsThreadSleep(0.00025);
+			continue;
+		}
+		
+		if (this->pImage)    { this->pImage->release(); }
+		
+		dequeLock->lock();
+			this->pImage = export_queue.front();
+			export_queue.pop_front();
+		dequeLock->unlock();
+		
+		NDArrayInfo info;
+		this->pImage->getInfo(&info);
+		
+		int counter, arrayCallbacks;
+		
+		this->getIntegerParam(NDArrayCounter, &counter);
+		this->getIntegerParam(NDArrayCallbacks, &arrayCallbacks);
+		
+		counter += 1;
+		
+		this->setIntegerParam(NDArrayCounter, counter);
+		this->setIntegerParam(NDArraySize, info.totalBytes);
+		
+		if (arrayCallbacks)    { doCallbacksGenericPointer(this->pImage, NDArrayData, 0); }
+	}
+}
+
+void simDetector::waitAcquireThread()
+{
+	this->lock();
+	
+	while(1)
+	{
+		this->unlock();
+			bool signal = this->startAcquireEvent->wait(.025);
+		this->lock();
+		
+		if (!signal)    { continue; }
+		
+		this->unlock();
+		
+		setStringParam(ADStatusMessage, "Acquiring data");
+		setIntegerParam(ADStatus, ADStatusAcquire);
+		setIntegerParam(ADNumImagesCounter, 0);
+		
+		for (size_t index = 0; index < this->numThreads; index += 1)
+		{
+			this->spawnAcquireThread(index);
+		}
+		
+		// Wait for all threads to finish acquiring
+		for (size_t index = 0; index < this->numThreads; index += 1)
+		{
+			this->threadFinishEvents[index]->wait();
+		}
+		
+		this->lock();
+		
+		/* First do callback on ADStatus. */
+		setStringParam(ADStatusMessage, "Waiting for acquisition");
+		setIntegerParam(ADStatus, ADStatusReadout);
+		this->setIntegerParam(ADAcquire, 0);
+		this->callParamCallbacks();
+		
+		while(! export_queue.empty())    { epicsThreadSleep(0.025); }
+		
+		this->setIntegerParam(ADStatus, ADStatusIdle);
+		this->callParamCallbacks();
+	}
+	
+	this->unlock();
+			
+}
+
 
 /** This thread calls computeImage to compute new image data and does the callbacks to send it to higher layers.
   * It implements the logic for single, multiple or continuous acquisition. */
-void simDetector::simTask()
+void simDetector::simTask(int index)
 {
     int status = asynSuccess;
-    int imageCounter;
-    int numImages, numImagesCounter;
+    int imageCounter, numImages, numImagesCounter;
     int imageMode;
     int arrayCallbacks;
-    int acquire=0;
-    NDArray *pImage;
+    NDArray *tempImage = NULL;
     double acquireTime, acquirePeriod, delay;
     epicsTimeStamp startTime, endTime;
     double elapsedTime;
     const char *functionName = "simTask";
-
-    this->lock();
+	
+	int currentImage = 0;
+	int acquire = 1;
+	
+	getIntegerParam(ADNumImages, &numImages);
+	getIntegerParam(NDArrayCallbacks, &arrayCallbacks);
+	getIntegerParam(ADImageMode, &imageMode);
+	/* Get the exposure parameters */
+	getDoubleParam(ADAcquireTime, &acquireTime);
+	getDoubleParam(ADAcquirePeriod, &acquirePeriod);
+	
+	
     /* Loop forever */
-    while (1) {
-        /* If we are not acquiring then wait for a semaphore that is given when acquisition is started */
-        if (!acquire) {
-          /* Release the lock while we wait for an event that says acquire has started, then lock again */
-            asynPrint(this->pasynUserSelf, ASYN_TRACE_FLOW,
-                "%s:%s: waiting for acquire to start\n", driverName, functionName);
-            this->unlock();
-            status = epicsEventWait(startEventId_);
-            this->lock();
-            acquire = 1;
-            setStringParam(ADStatusMessage, "Acquiring data");
-            setIntegerParam(ADNumImagesCounter, 0);
-        }
-
+    while (acquire) {
+		
         /* We are acquiring. */
         /* Get the current time */
         epicsTimeGetCurrent(&startTime);
-        getIntegerParam(ADImageMode, &imageMode);
-
-        /* Get the exposure parameters */
-        getDoubleParam(ADAcquireTime, &acquireTime);
-        getDoubleParam(ADAcquirePeriod, &acquirePeriod);
-
-        setIntegerParam(ADStatus, ADStatusAcquire);
 
         /* Open the shutter */
         setShutter(ADShutterOpen);
+		this->callParamCallbacks();
 
-        /* Call the callbacks to update any changes */
-        callParamCallbacks();
-
-        /* Update the image */
-        status = computeImage();
+        /* Update the image */		
+        status = computeImage(index, &tempImage);
+		
         if (status) continue;
 
         /* Simulate being busy during the exposure time.  Use epicsEventWaitWithTimeout so that
@@ -786,69 +852,47 @@ void simDetector::simTask()
                   "%s:%s: delay=%f\n",
                   driverName, functionName, delay);
         if (delay <= 0.0) delay = MIN_DELAY;
-        this->unlock();
-        status = epicsEventWaitWithTimeout(stopEventId_, delay);
-        this->lock();
-        if (status == epicsEventWaitOK) {
-            acquire = 0;
-            if (imageMode == ADImageContinuous) {
-              setIntegerParam(ADStatus, ADStatusIdle);
-            } else {
-              setIntegerParam(ADStatus, ADStatusAborted);
-            }
-            callParamCallbacks();
-        }
-
-        /* Close the shutter */
+  
+        bool signalled = this->stopAcquireEvents[index]->wait(delay);
+		
+		/* Close the shutter */
         setShutter(ADShutterClosed);
+		this->callParamCallbacks();
+		
+		if (signalled)    { acquire = 0; continue; }
 
-        if (!acquire) continue;
-
-        setIntegerParam(ADStatus, ADStatusReadout);
+        setIntegerParam(index, ADStatus, ADStatusReadout);
         /* Call the callbacks to update any changes */
-        callParamCallbacks();
-
-        pImage = this->pArrays[0];
+        callParamCallbacks(index);
 
         /* Get the current parameters */
-        getIntegerParam(NDArrayCounter, &imageCounter);
-        getIntegerParam(ADNumImages, &numImages);
-        getIntegerParam(ADNumImagesCounter, &numImagesCounter);
-        getIntegerParam(NDArrayCallbacks, &arrayCallbacks);
-        imageCounter++;
+		this->lock();
+        getIntegerParam(index, ADNumImagesCounter, &numImagesCounter);       
+		currentImage++;
         numImagesCounter++;
-        setIntegerParam(NDArrayCounter, imageCounter);
-        setIntegerParam(ADNumImagesCounter, numImagesCounter);
-
+        setIntegerParam(index, ADNumImagesCounter, numImagesCounter);
+		this->unlock();
+		
+		this->callParamCallbacks(index);
+		
         /* Put the frame number and time stamp into the buffer */
-        pImage->uniqueId = imageCounter;
-        pImage->timeStamp = startTime.secPastEpoch + startTime.nsec / 1.e9;
-        updateTimeStamp(&pImage->epicsTS);
+        tempImage->uniqueId = currentImage;
+        tempImage->timeStamp = startTime.secPastEpoch + startTime.nsec / 1.e9;
+        updateTimeStamp(&tempImage->epicsTS);
 
         /* Get any attributes that have been defined for this driver */
-        this->getAttributes(pImage->pAttributeList);
+        this->getAttributes(tempImage->pAttributeList);
 
-        if (arrayCallbacks) {
-            /* Call the NDArray callback */
-            asynPrint(this->pasynUserSelf, ASYN_TRACE_FLOW,
-                      "%s:%s: calling imageData callback\n", driverName, functionName);
-            doCallbacksGenericPointer(pImage, NDArrayData, 0);
-        }
+		dequeLock->lock();
+		this->export_queue.push_back(tempImage);
+		dequeLock->unlock();
 
         /* See if acquisition is done */
         if ((imageMode == ADImageSingle) ||
             ((imageMode == ADImageMultiple) &&
-             (numImagesCounter >= numImages))) {
-
-            /* First do callback on ADStatus. */
-            setStringParam(ADStatusMessage, "Waiting for acquisition");
-            setIntegerParam(ADStatus, ADStatusIdle);
-            callParamCallbacks();
+             (currentImage >= numImages))) {
 
             acquire = 0;
-            setIntegerParam(ADAcquire, acquire);
-            asynPrint(this->pasynUserSelf, ASYN_TRACE_FLOW,
-                      "%s:%s: acquisition completed\n", driverName, functionName);
         }
 
         /* Call the callbacks to update any changes */
@@ -864,23 +908,20 @@ void simDetector::simTask()
                       driverName, functionName, delay);
             if (delay >= 0.0) {
                 /* We set the status to waiting to indicate we are in the period delay */
-                setIntegerParam(ADStatus, ADStatusWaiting);
-                callParamCallbacks();
+                //setIntegerParam(index, ADStatus, ADStatusWaiting);
+                //callParamCallbacks();
                 this->unlock();
-                status = epicsEventWaitWithTimeout(stopEventId_, delay);
+                signalled = this->stopAcquireEvents[index]->wait(delay);
                 this->lock();
-                if (status == epicsEventWaitOK) {
+                if (signalled) 
+				{
                   acquire = 0;
-                  if (imageMode == ADImageContinuous) {
-                    setIntegerParam(ADStatus, ADStatusIdle);
-                  } else {
-                    setIntegerParam(ADStatus, ADStatusAborted);
-                  }
-                  callParamCallbacks();
                 }
             }
         }
     }
+	
+	this->threadFinishEvents[index]->signal();
 }
 
 
@@ -926,12 +967,13 @@ asynStatus simDetector::writeInt32(asynUser *pasynUser, epicsInt32 value)
         if (value && !acquiring) {
             /* Send an event to wake up the simulation task.
              * It won't actually start generating new images until we release the lock below */
-            epicsEventSignal(startEventId_);
+            this->startAcquireEvent->trigger();
         }
         if (!value && acquiring) {
-            /* This was a command to stop acquisition */
-            /* Send the stop event */
-            epicsEventSignal(stopEventId_);
+            for (int index = 0; index < this->numThreads; index += 1)
+			{
+				this->stopAcquireEvents[index]->trigger();
+			}
         }
     } else if ((function == NDDataType) ||
                (function == NDColorMode) ||
@@ -1029,34 +1071,41 @@ void simDetector::report(FILE *fp, int details)
   *            allowed to allocate. Set this to -1 to allow an unlimited amount of memory.
   * \param[in] priority The thread priority for the asyn port driver thread if ASYN_CANBLOCK is set in asynFlags.
   * \param[in] stackSize The stack size for the asyn port driver thread if ASYN_CANBLOCK is set in asynFlags.
+  * \param[in] numThreads The number of simTask threads to generate
   */
 simDetector::simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDataType_t dataType,
-                         int maxBuffers, size_t maxMemory, int priority, int stackSize)
+                         int maxBuffers, size_t maxMemory, int priority, int stackSize, int numThreads)
 
-    : ADDriver(portName, 1, 0, maxBuffers, maxMemory,
+    : ADDriver(portName, numThreads, 0, maxBuffers, maxMemory,
                0, 0, /* No interfaces beyond those set in ADDriver.cpp */
                0, 1, /* ASYN_CANBLOCK=0, ASYN_MULTIDEVICE=0, autoConnect=1 */
                priority, stackSize),
       pRaw_(NULL), xSine1_(0), xSine2_(0), ySine1_(0), ySine2_(0)
+{	
+	this->numThreads = numThreads;
 
-{
     int status = asynSuccess;
     char versionString[20];
     const char *functionName = "simDetector";
 
-    /* Create the epicsEvents for signaling to the simulate task when acquisition starts and stops */
-    startEventId_ = epicsEventCreate(epicsEventEmpty);
-    if (!startEventId_) {
-        printf("%s:%s epicsEventCreate failure for start event\n",
-            driverName, functionName);
-        return;
-    }
-    stopEventId_ = epicsEventCreate(epicsEventEmpty);
-    if (!stopEventId_) {
-        printf("%s:%s epicsEventCreate failure for stop event\n",
-            driverName, functionName);
-        return;
-    }
+	this->dequeLock = new epicsMutex();
+	
+	this->startAcquireEvent = new epicsEvent();
+	this->threadFinishEvents = (epicsEvent**) calloc(numThreads, sizeof(epicsEvent*));
+	this->stopAcquireEvents = (epicsEvent**) calloc(numThreads, sizeof(epicsEvent*));
+	
+	this->pRaw_ = (NDArray**) calloc(numThreads, sizeof(NDArray*));
+	this->pBackground_ = (NDArray**) calloc(numThreads, sizeof(NDArray*));
+	this->pRamp_ = (NDArray**) calloc(numThreads, sizeof(NDArray*));
+	this->pPeak_ = (NDArray**) calloc(numThreads, sizeof(NDArray*));
+	
+	for (int index = 0; index < numThreads; index += 1)
+	{
+		this->threadFinishEvents[index] = new epicsEvent();
+		this->stopAcquireEvents[index] = new epicsEvent();
+	}
+	
+	this->pImage = NULL;
 
     createParam(SimGainXString,               asynParamFloat64, &SimGainX);
     createParam(SimGainYString,               asynParamFloat64, &SimGainY);
@@ -1145,27 +1194,28 @@ simDetector::simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDat
     //this->deviceIsConnected = false;
     //this->disconnect(pasynUserSelf);
 
-    /* Create the thread that updates the images */
-    status = (epicsThreadCreate("SimDetTask",
-                                epicsThreadPriorityMedium,
-                                epicsThreadGetStackSize(epicsThreadStackMedium),
-                                (EPICSTHREADFUNC)simTaskC,
-                                this) == NULL);
-    if (status) {
-        printf("%s:%s epicsThreadCreate failure for image task\n",
-            driverName, functionName);
-        return;
-    }
+    /* Create the threads that control acquisition and exporting of the images */
+	epicsThreadCreate("ADSimDetector::waitAcquireThread()",
+	                  epicsThreadPriorityLow,
+	                  epicsThreadGetStackSize(epicsThreadStackMedium),
+	                  (EPICSTHREADFUNC)::acquire_thread_callback,
+	                  this);
+	                  
+	epicsThreadCreate("ADSimDetector::exportThread()",
+	                  epicsThreadPriorityMedium,
+	                  epicsThreadGetStackSize(epicsThreadStackMedium),
+	                  (EPICSTHREADFUNC)::export_thread_callback,
+	                  this);
 }
 
 /** Configuration command, called directly or from iocsh */
 extern "C" int simDetectorConfig(const char *portName, int maxSizeX, int maxSizeY, int dataType,
-                                 int maxBuffers, int maxMemory, int priority, int stackSize)
+                                 int maxBuffers, int maxMemory, int priority, int stackSize, int numThreads)
 {
     new simDetector(portName, maxSizeX, maxSizeY, (NDDataType_t)dataType,
                     (maxBuffers < 0) ? 0 : maxBuffers,
                     (maxMemory < 0) ? 0 : maxMemory,
-                    priority, stackSize);
+                    priority, stackSize, numThreads);
     return(asynSuccess);
 }
 
@@ -1178,6 +1228,7 @@ static const iocshArg simDetectorConfigArg4 = {"maxBuffers", iocshArgInt};
 static const iocshArg simDetectorConfigArg5 = {"maxMemory", iocshArgInt};
 static const iocshArg simDetectorConfigArg6 = {"priority", iocshArgInt};
 static const iocshArg simDetectorConfigArg7 = {"stackSize", iocshArgInt};
+static const iocshArg simDetectorConfigArg8 = {"numThreads", iocshArgInt};
 static const iocshArg * const simDetectorConfigArgs[] =  {&simDetectorConfigArg0,
                                                           &simDetectorConfigArg1,
                                                           &simDetectorConfigArg2,
@@ -1185,12 +1236,14 @@ static const iocshArg * const simDetectorConfigArgs[] =  {&simDetectorConfigArg0
                                                           &simDetectorConfigArg4,
                                                           &simDetectorConfigArg5,
                                                           &simDetectorConfigArg6,
-                                                          &simDetectorConfigArg7};
-static const iocshFuncDef configsimDetector = {"simDetectorConfig", 8, simDetectorConfigArgs};
+                                                          &simDetectorConfigArg7,
+                                                          &simDetectorConfigArg8};
+static const iocshFuncDef configsimDetector = {"simDetectorConfig", 9, simDetectorConfigArgs};
 static void configsimDetectorCallFunc(const iocshArgBuf *args)
 {
     simDetectorConfig(args[0].sval, args[1].ival, args[2].ival, args[3].ival,
-                      args[4].ival, args[5].ival, args[6].ival, args[7].ival);
+                      args[4].ival, args[5].ival, args[6].ival, args[7].ival,
+	                  args[8].ival);
 }
 
 
