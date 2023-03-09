@@ -55,7 +55,7 @@ template <typename epicsType> int simDetector::computeArray(int index, int sizeX
     epicsType* pBackgroundData = (epicsType*)pBackground_[index]->pData;
 
     getIntegerParam(SimMode, &simMode);
-    getIntegerParam(SimResetImage, &resetImage);
+    getIntegerParam(index, SimResetImage, &resetImage);
     getDoubleParam(SimOffset, &dOffset);
     getDoubleParam(SimNoise, &noise);
 
@@ -126,7 +126,7 @@ template <typename epicsType> int simDetector::computeLinearRampArray(int index,
     status = getDoubleParam (SimGainRed,    &gainRed);
     status = getDoubleParam (SimGainGreen,  &gainGreen);
     status = getDoubleParam (SimGainBlue,   &gainBlue);
-    status = getIntegerParam(SimResetImage, &resetImage);
+    status = getIntegerParam(index, SimResetImage, &resetImage);
     status = getIntegerParam(NDColorMode,   &colorMode);
 
     /* The intensity at each pixel[i,j] is:
@@ -262,7 +262,7 @@ template <typename epicsType> int simDetector::computePeaksArray(int index, int 
     status = getIntegerParam (SimPeakWidthX,  &peaksWidthX);
     status = getIntegerParam (SimPeakWidthY,  &peaksWidthY);
     status = getDoubleParam (SimPeakHeightVariation,  &peakVariation);
-    status = getIntegerParam(SimResetImage, &resetImage);
+    status = getIntegerParam(index, SimResetImage, &resetImage);
 
     peakFullWidthX = ((2 * MAX_PEAK_SIGMA * peaksWidthX + 1) < sizeX) ? (2 * MAX_PEAK_SIGMA * peaksWidthX + 1) : (sizeX - 1);
     peakFullWidthY = ((2 * MAX_PEAK_SIGMA * peaksWidthY + 1) < sizeY) ? (2 * MAX_PEAK_SIGMA * peaksWidthY + 1) : (sizeY - 1);
@@ -367,7 +367,7 @@ template <typename epicsType> int simDetector::computeSineArray(int index, int s
     status = getDoubleParam (SimGainRed,        &gainRed);
     status = getDoubleParam (SimGainGreen,      &gainGreen);
     status = getDoubleParam (SimGainBlue,       &gainBlue);
-    status = getIntegerParam(SimResetImage,     &resetImage);
+    status = getIntegerParam(index, SimResetImage,     &resetImage);
     status = getIntegerParam(NDColorMode,       &colorMode);
     status = getDoubleParam (ADAcquireTime,     &exposureTime);
     status = getIntegerParam(SimXSineOperation, &xSineOperation);
@@ -532,7 +532,7 @@ int simDetector::computeImage(int index, NDArray** output)
     status |= getIntegerParam(ADMaxSizeY,     &maxSizeY);
     status |= getIntegerParam(NDColorMode,    &colorMode);
     status |= getIntegerParam(NDDataType,     &itemp); dataType = (NDDataType_t)itemp;
-    status |= getIntegerParam(SimResetImage,  &resetImage);
+    status |= getIntegerParam(index, SimResetImage,  &resetImage);
     if (status) asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
                     "%s:%s: error getting parameters\n",
                     driverName, functionName);
@@ -684,7 +684,7 @@ int simDetector::computeImage(int index, NDArray** output)
     status |= setIntegerParam(NDArraySize,  (int)arrayInfo.totalBytes);
     status |= setIntegerParam(NDArraySizeX, (int)(*output)->dims[xDim].size);
     status |= setIntegerParam(NDArraySizeY, (int)(*output)->dims[yDim].size);
-    status |= setIntegerParam(SimResetImage, 0);
+    status |= setIntegerParam(index, SimResetImage, 0);
     if (status) asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
                     "%s:%s: error setting parameters\n",
                     driverName, functionName);
@@ -746,6 +746,8 @@ void simDetector::exportThread()
 		this->getIntegerParam(NDArrayCallbacks, &arrayCallbacks);
 		
 		counter += 1;
+		
+		this->pImage->uniqueId = counter;
 		
 		this->setIntegerParam(NDArrayCounter, counter);
 		this->setIntegerParam(NDArraySize, info.totalBytes);
@@ -875,8 +877,7 @@ void simDetector::simTask(int index)
 		
 		this->callParamCallbacks(index);
 		
-        /* Put the frame number and time stamp into the buffer */
-        tempImage->uniqueId = currentImage;
+        /* time stamp into the buffer */
         tempImage->timeStamp = startTime.secPastEpoch + startTime.nsec / 1.e9;
         updateTimeStamp(&tempImage->epicsTS);
 
@@ -979,7 +980,10 @@ asynStatus simDetector::writeInt32(asynUser *pasynUser, epicsInt32 value)
                (function == NDColorMode) ||
                (function == SimMode) ||
                ((function >= SimPeakStartX) && (function <= SimPeakStepY))) {  // This assumes order in simDetector.h!
-        status = setIntegerParam(SimResetImage, 1);
+			for (int index = 0; index < this->numThreads; index += 1)
+			{
+				status = setIntegerParam(index, SimResetImage, 1);
+			}
     } else {
         /* If this parameter belongs to a base class call its method */
         if (function < FIRST_SIM_DETECTOR_PARAM) status = ADDriver::writeInt32(pasynUser, value);
@@ -1016,7 +1020,10 @@ asynStatus simDetector::writeFloat64(asynUser *pasynUser, epicsFloat64 value)
 
     /* Changing any of the simulation parameters requires recomputing the base image */
     if ((function == ADGain) || (function >= FIRST_SIM_DETECTOR_PARAM)) {
-        status = setIntegerParam(SimResetImage, 1);
+		for (int index = 0; index < numThreads; index += 1)
+		{
+			status = setIntegerParam(index, SimResetImage, 1);
+		}
     } else {
         /* This parameter belongs to a base class call its method */
         status = ADDriver::writeFloat64(pasynUser, value);
@@ -1080,7 +1087,7 @@ simDetector::simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDat
                0, 0, /* No interfaces beyond those set in ADDriver.cpp */
                0, 1, /* ASYN_CANBLOCK=0, ASYN_MULTIDEVICE=0, autoConnect=1 */
                priority, stackSize),
-      pRaw_(NULL), xSine1_(0), xSine2_(0), ySine1_(0), ySine2_(0)
+      xSine1_(0), xSine2_(0), ySine1_(0), ySine2_(0)
 {	
 	this->numThreads = numThreads;
 
@@ -1168,7 +1175,12 @@ simDetector::simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDat
     status |= setDoubleParam (ADAcquireTime, .001);
     status |= setDoubleParam (ADAcquirePeriod, .005);
     status |= setIntegerParam(ADNumImages, 100);
-    status |= setIntegerParam(SimResetImage, 1);
+	
+	for (size_t index = 0; index < numThreads; index += 1)
+	{
+		status |= setIntegerParam(index, SimResetImage, 1);
+	}
+	
     status |= setDoubleParam (SimGainX, 1);
     status |= setDoubleParam (SimGainY, 1);
     status |= setDoubleParam (SimGainRed, 1);
