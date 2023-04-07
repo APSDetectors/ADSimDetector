@@ -6,13 +6,7 @@ DIRS := $(DIRS) $(filter-out $(DIRS), $(wildcard *App))
 DIRS := $(DIRS) $(filter-out $(DIRS), $(wildcard *app))
 include $(TOP)/configure/RULES_TOP
 
-uninstall: uninstall_iocs
-uninstall_iocs:
-	$(MAKE) -C iocs uninstall
-.PHONY: uninstall uninstall_iocs
+.PHONY: uninstall
 
-realuninstall: realuninstall_iocs
-realuninstall_iocs:
-	$(MAKE) -C iocs realuninstall
-.PHONY: realuninstall realuninstall_iocs
+.PHONY: realuninstall
 
