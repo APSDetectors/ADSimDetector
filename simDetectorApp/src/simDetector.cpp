@@ -1149,7 +1149,7 @@ simDetector::simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDat
 
     /* Set some default values for parameters */
     status =  setStringParam (ADManufacturer, "Simulated detector");
-    status |= setStringParam (ADModel, "Basic simulator");
+    status |= setStringParam (ADModel, "Multithreaded simulator");
     epicsSnprintf(versionString, sizeof(versionString), "%d.%d.%d",
                   DRIVER_VERSION, DRIVER_REVISION, DRIVER_MODIFICATION);
     setStringParam(NDDriverVersion, versionString);
