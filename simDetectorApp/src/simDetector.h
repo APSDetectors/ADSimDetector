@@ -18,9 +18,9 @@ public:
     virtual asynStatus writeFloat64(asynUser *pasynUser, epicsFloat64 value);
     virtual void setShutter(int open);
     virtual void report(FILE *fp, int details);
-    void simTask(int index); /**< Should be private, but gets called from C, so must be public */
+    void simTask(int index, int distribution); /**< Should be private, but gets called from C, so must be public */
 	
-	void spawnAcquireThread(int index);
+	void spawnAcquireThread(int index, int distribution);
 	void waitAcquireThread();
 	void exportThread();
 
@@ -109,6 +109,7 @@ typedef struct
 {
 	simDetector* driver;
 	int index;
+	int distribution;
 } acquire_data;
 
 #define SimGainXString                "SIM_GAIN_X"
