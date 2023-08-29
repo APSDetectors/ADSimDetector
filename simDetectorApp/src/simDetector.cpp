@@ -51,7 +51,8 @@ template <typename epicsType> int simDetector::computeArray(int index, int sizeX
     double dOffset;
     double noise;
     int i;
-    epicsType* pRawData = (epicsType*)pRaw_[index]->pData;
+	
+    epicsType* pRawData = (epicsType*) pRaw_[index]->pData;
     epicsType* pBackgroundData = (epicsType*)pBackground_[index]->pData;
 
     getIntegerParam(SimMode, &simMode);
@@ -695,15 +696,16 @@ static void simTaskC(void *drvPvt)
 {
 	acquire_data* data = (acquire_data*) drvPvt;
 	
-	data->driver->simTask(data->index);
+	data->driver->simTask(data->index, data->distribution);
 }
 
-void simDetector::spawnAcquireThread(int index)
+void simDetector::spawnAcquireThread(int index, int distribution)
 {
 	acquire_data* data = new acquire_data;
 	
 	data->driver = this;
 	data->index = index;
+	data->distribution = distribution;
 	
 	epicsThreadCreate("simDetector::simTask()",
 		epicsThreadPriorityMedium,
@@ -747,8 +749,6 @@ void simDetector::exportThread()
 		
 		counter += 1;
 		
-		this->pImage->uniqueId = counter;
-		
 		this->setIntegerParam(NDArrayCounter, counter);
 		this->setIntegerParam(NDArraySize, info.totalBytes);
 		
@@ -774,9 +774,22 @@ void simDetector::waitAcquireThread()
 		setIntegerParam(ADStatus, ADStatusAcquire);
 		setIntegerParam(ADNumImagesCounter, 0);
 		
+		double acquire_period;
+		getDoubleParam(ADAcquirePeriod, &acquire_period);
+		
+		int num_images;
+		getIntegerParam(ADNumImages, &num_images);
+		
+		int image_min = std::floor(num_images / this->numThreads);
+		int num_extra = num_images % this->numThreads;
+		
 		for (size_t index = 0; index < this->numThreads; index += 1)
 		{
-			this->spawnAcquireThread(index);
+			int to_distribute = (index < num_extra) ? image_min + 1 : image_min;
+			
+			this->spawnAcquireThread(index, to_distribute);
+			
+			epicsThreadSleep(acquire_period);
 		}
 		
 		// Wait for all threads to finish acquiring
@@ -806,10 +819,10 @@ void simDetector::waitAcquireThread()
 
 /** This thread calls computeImage to compute new image data and does the callbacks to send it to higher layers.
   * It implements the logic for single, multiple or continuous acquisition. */
-void simDetector::simTask(int index)
+void simDetector::simTask(int index, int images_to_get)
 {
     int status = asynSuccess;
-    int imageCounter, numImages, numImagesCounter;
+    int numImages, numImagesCounter;
     int imageMode;
     int arrayCallbacks;
     NDArray *tempImage = NULL;
@@ -818,16 +831,20 @@ void simDetector::simTask(int index)
     double elapsedTime;
     const char *functionName = "simTask";
 	
-	int currentImage = 0;
+	int images_acquired = 0;
+	int currentImage = index + 1 - this->numThreads;
 	int acquire = 1;
 	
-	getIntegerParam(ADNumImages, &numImages);
+	numImages = images_to_get;
+	
 	getIntegerParam(NDArrayCallbacks, &arrayCallbacks);
 	getIntegerParam(ADImageMode, &imageMode);
 	/* Get the exposure parameters */
 	getDoubleParam(ADAcquireTime, &acquireTime);
 	getDoubleParam(ADAcquirePeriod, &acquirePeriod);
 	
+	
+	acquirePeriod *= this->numThreads;
 	
     /* Loop forever */
     while (acquire) {
@@ -870,14 +887,16 @@ void simDetector::simTask(int index)
         /* Get the current parameters */
 		this->lock();
         getIntegerParam(index, ADNumImagesCounter, &numImagesCounter);       
-		currentImage++;
+		currentImage += this->numThreads;
         numImagesCounter++;
+		images_acquired++;
         setIntegerParam(index, ADNumImagesCounter, numImagesCounter);
-		this->unlock();
 		
 		this->callParamCallbacks(index);
+		this->unlock();
 		
-        /* time stamp into the buffer */
+        /* Put the frame number and time stamp into the buffer */
+        tempImage->uniqueId = currentImage;
         tempImage->timeStamp = startTime.secPastEpoch + startTime.nsec / 1.e9;
         updateTimeStamp(&tempImage->epicsTS);
 
@@ -891,12 +910,13 @@ void simDetector::simTask(int index)
         /* See if acquisition is done */
         if ((imageMode == ADImageSingle) ||
             ((imageMode == ADImageMultiple) &&
-             (currentImage >= numImages))) {
+             (images_acquired >= numImages))) {
 
             acquire = 0;
         }
 
         /* Call the callbacks to update any changes */
+		this->lock();
         callParamCallbacks();
 
         /* If we are acquiring then sleep for the acquire period minus elapsed time. */
@@ -907,19 +927,27 @@ void simDetector::simTask(int index)
             asynPrint(this->pasynUserSelf, ASYN_TRACE_FLOW,
                       "%s:%s: delay=%f\n",
                       driverName, functionName, delay);
+			
             if (delay >= 0.0) {
                 /* We set the status to waiting to indicate we are in the period delay */
-                //setIntegerParam(index, ADStatus, ADStatusWaiting);
-                //callParamCallbacks();
-                this->unlock();
+				
+                setIntegerParam(index, ADStatus, ADStatusWaiting);
+                callParamCallbacks();
+				
+				this->unlock();
+				
                 signalled = this->stopAcquireEvents[index]->wait(delay);
-                this->lock();
+
+				this->lock();
+				
                 if (signalled) 
 				{
                   acquire = 0;
                 }
             }
         }
+		
+		this->unlock();
     }
 	
 	this->threadFinishEvents[index]->signal();
@@ -971,7 +999,7 @@ asynStatus simDetector::writeInt32(asynUser *pasynUser, epicsInt32 value)
             this->startAcquireEvent->trigger();
         }
         if (!value && acquiring) {
-            for (int index = 0; index < this->numThreads; index += 1)
+            for (size_t index = 0; index < this->numThreads; index += 1)
 			{
 				this->stopAcquireEvents[index]->trigger();
 			}
@@ -980,10 +1008,7 @@ asynStatus simDetector::writeInt32(asynUser *pasynUser, epicsInt32 value)
                (function == NDColorMode) ||
                (function == SimMode) ||
                ((function >= SimPeakStartX) && (function <= SimPeakStepY))) {  // This assumes order in simDetector.h!
-			for (int index = 0; index < this->numThreads; index += 1)
-			{
-				status = setIntegerParam(index, SimResetImage, 1);
-			}
+        status = setIntegerParam(SimResetImage, 1);
     } else {
         /* If this parameter belongs to a base class call its method */
         if (function < FIRST_SIM_DETECTOR_PARAM) status = ADDriver::writeInt32(pasynUser, value);
@@ -1020,10 +1045,7 @@ asynStatus simDetector::writeFloat64(asynUser *pasynUser, epicsFloat64 value)
 
     /* Changing any of the simulation parameters requires recomputing the base image */
     if ((function == ADGain) || (function >= FIRST_SIM_DETECTOR_PARAM)) {
-		for (int index = 0; index < numThreads; index += 1)
-		{
-			status = setIntegerParam(index, SimResetImage, 1);
-		}
+        status = setIntegerParam(SimResetImage, 1);
     } else {
         /* This parameter belongs to a base class call its method */
         status = ADDriver::writeFloat64(pasynUser, value);
@@ -1087,7 +1109,7 @@ simDetector::simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDat
                0, 0, /* No interfaces beyond those set in ADDriver.cpp */
                0, 1, /* ASYN_CANBLOCK=0, ASYN_MULTIDEVICE=0, autoConnect=1 */
                priority, stackSize),
-      xSine1_(0), xSine2_(0), ySine1_(0), ySine2_(0)
+      pRaw_(NULL), xSine1_(0), xSine2_(0), ySine1_(0), ySine2_(0)
 {	
 	this->numThreads = numThreads;
 
@@ -1176,11 +1198,10 @@ simDetector::simDetector(const char *portName, int maxSizeX, int maxSizeY, NDDat
     status |= setDoubleParam (ADAcquirePeriod, .005);
     status |= setIntegerParam(ADNumImages, 100);
 	
-	for (size_t index = 0; index < numThreads; index += 1)
+	for (size_t index = 0; index < this->numThreads; index += 1)
 	{
 		status |= setIntegerParam(index, SimResetImage, 1);
 	}
-	
     status |= setDoubleParam (SimGainX, 1);
     status |= setDoubleParam (SimGainY, 1);
     status |= setDoubleParam (SimGainRed, 1);
